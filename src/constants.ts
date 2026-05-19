@@ -8,9 +8,10 @@ export const IMPACT_WEEK_DEV_NAME = "Guido Tapia";
 // The two SAs who can staff Discovery work.
 export const DISCOVERY_SA_NAMES = [FRANCISCO_SA_NAME, JESUS_SA_NAME] as const;
 
-// Impact Week staffing percentages.
+// Impact Week staffing percentages. The SA and Designer each commit 25%
+// (10h across the 5-day week); the Tech Advisor commits 15% (6h).
 export const IMPACT_WEEK_SA_PERCENT = 25;
-export const IMPACT_WEEK_TA_PERCENT = 25;
+export const IMPACT_WEEK_TA_PERCENT = 15;
 export const IMPACT_WEEK_DESIGNER_PERCENT = 25;
 export const IMPACT_WEEK_LENGTH_WEEKDAYS = 5;
 export const IMPACT_WEEK_MAX_PARALLEL = 4;
