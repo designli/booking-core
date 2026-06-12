@@ -31,3 +31,11 @@ export type AssigneeBooking = {
   personId: number;
   percent: number;
 };
+
+// A PTO range for one person, inclusive on both ends. Structurally minimal
+// so resource-tracker's richer row (id, note) satisfies it as-is.
+export type PtoDay = {
+  person_id: number;
+  start_date: string; // ISO YYYY-MM-DD
+  end_date: string; // ISO YYYY-MM-DD
+};

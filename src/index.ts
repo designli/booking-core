@@ -3,6 +3,7 @@ export type {
   AllocationSource,
   Person,
   AssigneeBooking,
+  PtoDay,
 } from "./types.js";
 
 export {
@@ -21,6 +22,9 @@ export {
 export {
   findAvailableStarts,
   discoveryKickoffDates,
+  hasPtoOnDay,
+  ptoBlocksKickoff,
+  KICKOFF_PTO_BLACKOUT_WEEKDAYS,
 } from "./suggestions.js";
 
 export {

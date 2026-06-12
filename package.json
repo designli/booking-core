@@ -1,6 +1,6 @@
 {
   "name": "@designli/booking-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "description": "Shared capacity + scheduling logic for Designli's discovery booking widgets (Impact Week, SolutionLab, W1DI).",
   "type": "module",
