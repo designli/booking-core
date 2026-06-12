@@ -26,10 +26,16 @@ export type Person = {
 
 // A planned booking row: who would carry it and at what percent. The
 // capacity checkers walk an array of these and verify none would breach
-// 100% on any day of the candidate window.
+// their ceiling (maxPercent, default 100) on any day of the candidate
+// window.
 export type AssigneeBooking = {
   personId: number;
   percent: number;
+  // Booking ceiling for this person. Defaults to 100. The Tech Advisor
+  // (Guido) is allowed to stack to TECH_ADVISOR_MAX_PERCENT — consumer UIs
+  // keep rendering >100% days in red, but bookings aren't blocked until
+  // the ceiling is hit.
+  maxPercent?: number;
 };
 
 // A PTO range for one person, inclusive on both ends. Structurally minimal

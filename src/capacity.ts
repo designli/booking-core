@@ -45,7 +45,7 @@ export function rangeHasCapacity(
       end,
       allocations
     );
-    if (existing + a.percent > 100) return false;
+    if (existing + a.percent > (a.maxPercent ?? 100)) return false;
   }
   return true;
 }
