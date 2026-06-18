@@ -8,11 +8,14 @@ export const IMPACT_WEEK_DEV_NAME = "Guido Tapia";
 // The two SAs who can staff Discovery work.
 export const DISCOVERY_SA_NAMES = [FRANCISCO_SA_NAME, JESUS_SA_NAME] as const;
 
-// The Tech Advisor (Guido) may be booked past 100%, up to this ceiling
-// (Keith, 2026-06-12). Days where he lands over 100% still render red in
-// the tracker timelines — the overload is visible, just not blocking.
-// Pass as AssigneeBooking.maxPercent wherever Guido is an assignee.
-export const TECH_ADVISOR_MAX_PERCENT = 150;
+// The Tech Advisor (Guido) is capped at 100% like everyone else — newly
+// booked services (Impact Week, SolutionLab, Engineering Intensive) can no
+// longer stack him past 100% (Keith, 2026-06-18, reverting the temporary
+// 150% allowance from 2026-06-12). Days whose existing allocations already
+// exceed 100% still render red in the tracker timelines; this constant only
+// governs whether a NEW booking is blocked. Pass as AssigneeBooking.maxPercent
+// wherever Guido is an assignee.
+export const TECH_ADVISOR_MAX_PERCENT = 100;
 
 // Impact Week staffing percentages. The SA and Designer each commit 25%
 // (10h across the 5-day week); the Tech Advisor commits 15% (6h).
