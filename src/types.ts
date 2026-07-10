@@ -6,6 +6,7 @@ export type AllocationSource =
   | "runn"
   | "impact_week"
   | "w1di"
+  | "discovery_week"
   | "solution_lab";
 
 export type Allocation = {

@@ -1,6 +1,17 @@
-import type { Allocation, AssigneeBooking, PtoDay } from "./types.js";
+import type {
+  Allocation,
+  AllocationSource,
+  AssigneeBooking,
+  PtoDay,
+} from "./types.js";
 import { addWeekdays, nextWeekday } from "./dates.js";
-import { rangeHasCapacity } from "./capacity.js";
+import { maxAllocPercentInRange, rangeHasCapacity } from "./capacity.js";
+import { DISCOVERY_INJECTION_SOURCES } from "./constants.js";
+
+const INJECTION_SOURCE_SET: ReadonlySet<AllocationSource> = new Set(
+  DISCOVERY_INJECTION_SOURCES
+);
+const EMPTY_DATE_SET: ReadonlySet<string> = new Set<string>();
 
 // The kickoff blackout: whoever runs the kickoff must be PTO-free on day 1
 // of the engagement (the kickoff day itself). PTO on any later day is fair
@@ -73,6 +84,128 @@ export function findAvailableStarts(
     const end = addWeekdays(day, projectLengthWeekdays - 1);
     if (rangeHasCapacity(assignees, day, end, allocations)) {
       out.push(day);
+    }
+    day = addWeekdays(day, 1);
+  }
+  return out;
+}
+
+// Result of routing one Impact Week week to an SA. `viaFallback` is true when
+// the primary SA (Francisco) couldn't take the week and it was handed to the
+// fallback SA (Jesus).
+export type ImpactWeekSaPick = {
+  saPersonId: number;
+  viaFallback: boolean;
+};
+
+// Decide which SA carries an Impact Week over [start, end]. Prefers
+// `primarySaId` (Francisco): if he can absorb the IW's `saPercent` that week,
+// he keeps it. Otherwise the week is offloaded to `fallbackSaId` (Jesus) — but
+// ONLY when the primary is blocked *specifically by a Week-1 Discovery
+// Injection*. "Blocked by an injection" means the primary would fit if his
+// injection allocations (discovery_week / w1di) weren't there; if he's over
+// capacity for any other reason (stacked Impact Weeks, a SolutionLab, etc.)
+// the week stays his and this returns null. Returns null when neither SA fits,
+// when there's no fallback SA, or when the primary's block isn't an injection.
+export function pickImpactWeekSa(
+  primarySaId: number,
+  fallbackSaId: number | null,
+  start: string,
+  end: string,
+  allocations: Allocation[],
+  saPercent: number
+): ImpactWeekSaPick | null {
+  const primaryLoad = maxAllocPercentInRange(
+    primarySaId,
+    start,
+    end,
+    allocations
+  );
+  if (primaryLoad + saPercent <= 100) {
+    return { saPersonId: primarySaId, viaFallback: false };
+  }
+  // Primary is over capacity this week. Only offload when the blocker is a
+  // Discovery Injection: recompute his load with injection allocations removed
+  // — if he'd fit without them, the injection is the cause and Jesus covers it.
+  if (fallbackSaId == null) return null;
+  const primaryLoadSansInjection = maxAllocPercentInRange(
+    primarySaId,
+    start,
+    end,
+    allocations.filter((a) => !INJECTION_SOURCE_SET.has(a.source))
+  );
+  if (primaryLoadSansInjection + saPercent > 100) return null;
+  const fallbackLoad = maxAllocPercentInRange(
+    fallbackSaId,
+    start,
+    end,
+    allocations
+  );
+  if (fallbackLoad + saPercent <= 100) {
+    return { saPersonId: fallbackSaId, viaFallback: true };
+  }
+  return null;
+}
+
+// Like findAvailableStarts, but two-SA aware: walk forward from `fromIso` and
+// return up to `count` Impact Week starts, each tagged with the SA who would
+// carry it. Prefers the primary SA (Francisco); when he's blocked for a week
+// specifically by a Discovery Injection, the start is offered with the
+// fallback SA (Jesus) — see pickImpactWeekSa. `otherAssignees` (e.g. Guido at
+// 15%) are capacity-checked for every candidate regardless of which SA lands
+// it. PTO and same-day-kickoff rules apply to whichever SA ends up carrying
+// the week (via `kickoffDatesBySa`, keyed by SA id — each SA has their own
+// kickoff calendar). A primary blocked by his own PTO or a same-day kickoff —
+// rather than by capacity — does NOT trigger the fallback; that date is simply
+// skipped, matching the single-SA behaviour.
+export function findImpactWeekStartsWithSa(
+  primarySaId: number,
+  fallbackSaId: number | null,
+  saPercent: number,
+  otherAssignees: AssigneeBooking[],
+  projectLengthWeekdays: number,
+  fromIso: string,
+  allocations: Allocation[],
+  count: number,
+  options?: {
+    maxDaysOut?: number;
+    pto?: PtoDay[];
+    kickoffDatesBySa?: Readonly<Record<number, ReadonlySet<string>>>;
+  }
+): Array<{ start: string; saPersonId: number; viaFallback: boolean }> {
+  const maxDaysOut = options?.maxDaysOut ?? 365;
+  const pto = options?.pto ?? [];
+  const kickoffDatesBySa = options?.kickoffDatesBySa ?? {};
+  const out: Array<{
+    start: string;
+    saPersonId: number;
+    viaFallback: boolean;
+  }> = [];
+  let day = nextWeekday(fromIso);
+  for (let i = 0; i < maxDaysOut && out.length < count; i++) {
+    const end = addWeekdays(day, projectLengthWeekdays - 1);
+    // Guido (and any other fixed assignees) must fit regardless of the SA.
+    if (rangeHasCapacity(otherAssignees, day, end, allocations)) {
+      const pick = pickImpactWeekSa(
+        primarySaId,
+        fallbackSaId,
+        day,
+        end,
+        allocations,
+        saPercent
+      );
+      if (pick) {
+        const onKickoff = (
+          kickoffDatesBySa[pick.saPersonId] ?? EMPTY_DATE_SET
+        ).has(day);
+        if (!onKickoff && !ptoBlocksKickoff(pick.saPersonId, day, pto)) {
+          out.push({
+            start: day,
+            saPersonId: pick.saPersonId,
+            viaFallback: pick.viaFallback,
+          });
+        }
+      }
     }
     day = addWeekdays(day, 1);
   }

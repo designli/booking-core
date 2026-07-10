@@ -8,6 +8,18 @@ export const IMPACT_WEEK_DEV_NAME = "Guido Tapia";
 // The two SAs who can staff Discovery work.
 export const DISCOVERY_SA_NAMES = [FRANCISCO_SA_NAME, JESUS_SA_NAME] as const;
 
+// Allocation sources that represent a Week-1 Discovery Injection commitment:
+// the standalone à-la-carte `discovery_week` shadow project, and the `w1di`
+// flag that rides on a TractionLab delivery project. Both put an SA at 100%
+// for a full week. When Francisco is committed to one of these and can't
+// absorb an Impact Week that week, the rep-facing booking flow routes the
+// Impact Week to Jesus instead (see pickImpactWeekSa). Francisco stays the
+// default whenever he's free.
+export const DISCOVERY_INJECTION_SOURCES = [
+  "discovery_week",
+  "w1di",
+] as const;
+
 // The Tech Advisor (Guido) is capped at 100% like everyone else — newly
 // booked services (Impact Week, SolutionLab, Engineering Intensive) can no
 // longer stack him past 100% (Keith, 2026-06-18, reverting the temporary

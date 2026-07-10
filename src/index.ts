@@ -21,11 +21,14 @@ export {
 
 export {
   findAvailableStarts,
+  findImpactWeekStartsWithSa,
+  pickImpactWeekSa,
   discoveryKickoffDates,
   hasPtoOnDay,
   ptoBlocksKickoff,
   KICKOFF_PTO_BLACKOUT_WEEKDAYS,
 } from "./suggestions.js";
+export type { ImpactWeekSaPick } from "./suggestions.js";
 
 export {
   FRANCISCO_SA_NAME,
@@ -33,6 +36,7 @@ export {
   IMPACT_WEEK_DEV_NAME,
   TECH_ADVISOR_MAX_PERCENT,
   DISCOVERY_SA_NAMES,
+  DISCOVERY_INJECTION_SOURCES,
   IMPACT_WEEK_SA_PERCENT,
   IMPACT_WEEK_TA_PERCENT,
   IMPACT_WEEK_DESIGNER_PERCENT,
