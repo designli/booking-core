@@ -99,65 +99,79 @@ export type ImpactWeekSaPick = {
 };
 
 // Decide which SA carries an Impact Week over [start, end]. Prefers
-// `primarySaId` (Francisco): if he can absorb the IW's `saPercent` that week,
-// he keeps it. Otherwise the week is offloaded to `fallbackSaId` (Jesus) — but
-// ONLY when the primary is blocked *specifically by a Week-1 Discovery
-// Injection*. "Blocked by an injection" means the primary would fit if his
-// injection allocations (discovery_week / w1di) weren't there; if he's over
-// capacity for any other reason (stacked Impact Weeks, a SolutionLab, etc.)
-// the week stays his and this returns null. Returns null when neither SA fits,
-// when there's no fallback SA, or when the primary's block isn't an injection.
+// `primarySaId` (Francisco): if he can absorb the IW's `saPercent` that week
+// and he's free on the kickoff day, he keeps it. Otherwise the week is
+// offloaded to `fallbackSaId` (Jesus) — but only for the two blockers that are
+// genuinely "Francisco can't be here for this one":
+//
+//   1. A Week-1 Discovery Injection eating his capacity. "Blocked by an
+//      injection" means he'd fit if his injection allocations (discovery_week
+//      / w1di) weren't there; over capacity for any other reason (stacked
+//      Impact Weeks, a SolutionLab) keeps the week his.
+//   2. PTO on the kickoff day — he's out of the office and can't run day 1.
+//      Pass `options.pto` to enable this; PTO on days 2-5 is fair game and
+//      never reroutes (see KICKOFF_PTO_BLACKOUT_WEEKDAYS).
+//
+// The fallback only takes the week if he can actually run it: capacity for the
+// full week AND no PTO of his own on the kickoff day. Returns null when nobody
+// can take it, when there's no fallback SA, or when the primary's block is one
+// this doesn't reroute.
 export function pickImpactWeekSa(
   primarySaId: number,
   fallbackSaId: number | null,
   start: string,
   end: string,
   allocations: Allocation[],
-  saPercent: number
+  saPercent: number,
+  options?: { pto?: PtoDay[] }
 ): ImpactWeekSaPick | null {
+  const pto = options?.pto ?? [];
   const primaryLoad = maxAllocPercentInRange(
     primarySaId,
     start,
     end,
     allocations
   );
-  if (primaryLoad + saPercent <= 100) {
+  const primaryHasCapacity = primaryLoad + saPercent <= 100;
+  const primaryOnKickoffPto = ptoBlocksKickoff(primarySaId, start, pto);
+  if (primaryHasCapacity && !primaryOnKickoffPto) {
     return { saPersonId: primarySaId, viaFallback: false };
   }
-  // Primary is over capacity this week. Only offload when the blocker is a
-  // Discovery Injection: recompute his load with injection allocations removed
-  // — if he'd fit without them, the injection is the cause and Jesus covers it.
   if (fallbackSaId == null) return null;
-  const primaryLoadSansInjection = maxAllocPercentInRange(
-    primarySaId,
-    start,
-    end,
-    allocations.filter((a) => !INJECTION_SOURCE_SET.has(a.source))
-  );
-  if (primaryLoadSansInjection + saPercent > 100) return null;
+  // Primary can't take the week. If capacity is what's stopping him, only
+  // offload when a Discovery Injection is the cause: recompute his load with
+  // injection allocations removed — if he'd fit without them, Jesus covers it.
+  if (!primaryHasCapacity) {
+    const primaryLoadSansInjection = maxAllocPercentInRange(
+      primarySaId,
+      start,
+      end,
+      allocations.filter((a) => !INJECTION_SOURCE_SET.has(a.source))
+    );
+    if (primaryLoadSansInjection + saPercent > 100) return null;
+  }
   const fallbackLoad = maxAllocPercentInRange(
     fallbackSaId,
     start,
     end,
     allocations
   );
-  if (fallbackLoad + saPercent <= 100) {
-    return { saPersonId: fallbackSaId, viaFallback: true };
-  }
-  return null;
+  if (fallbackLoad + saPercent > 100) return null;
+  if (ptoBlocksKickoff(fallbackSaId, start, pto)) return null;
+  return { saPersonId: fallbackSaId, viaFallback: true };
 }
 
 // Like findAvailableStarts, but two-SA aware: walk forward from `fromIso` and
 // return up to `count` Impact Week starts, each tagged with the SA who would
 // carry it. Prefers the primary SA (Francisco); when he's blocked for a week
-// specifically by a Discovery Injection, the start is offered with the
-// fallback SA (Jesus) — see pickImpactWeekSa. `otherAssignees` (e.g. Guido at
-// 15%) are capacity-checked for every candidate regardless of which SA lands
-// it. PTO and same-day-kickoff rules apply to whichever SA ends up carrying
-// the week (via `kickoffDatesBySa`, keyed by SA id — each SA has their own
-// kickoff calendar). A primary blocked by his own PTO or a same-day kickoff —
-// rather than by capacity — does NOT trigger the fallback; that date is simply
-// skipped, matching the single-SA behaviour.
+// either by a Discovery Injection or by PTO on that kickoff day, the start is
+// offered with the fallback SA (Jesus) instead of disappearing — see
+// pickImpactWeekSa. `otherAssignees` (e.g. Guido at 15%) are capacity-checked
+// for every candidate regardless of which SA lands it. The same-day-kickoff
+// rule applies to whichever SA ends up carrying the week (via
+// `kickoffDatesBySa`, keyed by SA id — each SA has their own kickoff
+// calendar); a primary already kicking something off that day does NOT trigger
+// the fallback, that date is simply skipped.
 export function findImpactWeekStartsWithSa(
   primarySaId: number,
   fallbackSaId: number | null,
@@ -186,19 +200,23 @@ export function findImpactWeekStartsWithSa(
     const end = addWeekdays(day, projectLengthWeekdays - 1);
     // Guido (and any other fixed assignees) must fit regardless of the SA.
     if (rangeHasCapacity(otherAssignees, day, end, allocations)) {
+      // pickImpactWeekSa owns the kickoff-PTO rule (it's what decides whether
+      // PTO reroutes to the fallback or kills the date), so the SA it hands
+      // back is already PTO-clear for `day`.
       const pick = pickImpactWeekSa(
         primarySaId,
         fallbackSaId,
         day,
         end,
         allocations,
-        saPercent
+        saPercent,
+        { pto }
       );
       if (pick) {
         const onKickoff = (
           kickoffDatesBySa[pick.saPersonId] ?? EMPTY_DATE_SET
         ).has(day);
-        if (!onKickoff && !ptoBlocksKickoff(pick.saPersonId, day, pto)) {
+        if (!onKickoff) {
           out.push({
             start: day,
             saPersonId: pick.saPersonId,
